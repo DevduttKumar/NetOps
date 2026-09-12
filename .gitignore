@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+backend/venv/
+venv/
+.venv/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Production Build Output
+frontend/dist/
+dist/
+build/
+
+# Logs & Runtime State
+backend/login_logs.json
+backend/snmp_trap_logs.json
+backend/network_config.json
+*.log
+
+# Environment & Sensitive Keys
+.env
+.env.local
+.env.*.local
+
+# IDE & OS Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

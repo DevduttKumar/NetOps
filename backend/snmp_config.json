@@ -1,0 +1,19 @@
+{
+  "devices": [
+    {
+      "ip": "192.168.102.53",
+      "port": 1234
+    },
+    {
+      "ip": "192.169.102.1",
+      "port": 9162
+    }
+  ],
+  "community": "public",
+  "reboot_alert_enabled": true,
+  "hw_failure": {
+    "enabled": true,
+    "temp_threshold_c": 75.0,
+    "check_interval_sec": 30
+  }
+}
