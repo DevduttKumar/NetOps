@@ -13,7 +13,6 @@ import re
 import os
 import json
 import datetime
-import yaml
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from flask_socketio import SocketIO
@@ -33,19 +32,6 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=False
 )
-
-# CORS(
-#     app,
-#     supports_credentials=True,
-#     origins=[
-#         "http://localhost:5173",
-#         "http://127.0.0.1:5173",
-#         "http://192.168.102.227:5173",
-#         "http://192.168.102.227",
-#         "http://192.168.102.127",
-#         "http://192.168.102.127:5173"
-#     ]
-# )
 
 CORS(
     app,
@@ -71,26 +57,37 @@ snmp_log_lock    = threading.Lock()
 snmp_config_lock = threading.Lock()
 ntp_servers_lock = threading.Lock()
 
+def _read_json(path, default=None):
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return default() if callable(default) else (default if default is not None else {})
+
+def _write_json(path, data, mode=0o666):
+    try:
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+        if mode:
+            os.chmod(path, mode)
+    except Exception:
+        pass
+
 # ─────────────────────────────────────────────
 #  AUTHENTICATION & LOGIN AUDIT
 # ─────────────────────────────────────────────
 def _load_or_create_auth_config():
-    if os.path.exists(AUTH_CONFIG_PATH):
-        try:
-            with open(AUTH_CONFIG_PATH, "r") as f:
-                cfg = json.load(f)
-            if "users" in cfg:
-                return cfg
-            if cfg.get("username") and cfg.get("password_hash"):
-                return {"users": [{"username": cfg["username"], "password_hash": cfg["password_hash"], "role": "admin"}]}
-        except Exception:
-            pass
+    cfg = _read_json(AUTH_CONFIG_PATH)
+    if cfg:
+        if "users" in cfg:
+            return cfg
+        if cfg.get("username") and cfg.get("password_hash"):
+            return {"users": [{"username": cfg["username"], "password_hash": cfg["password_hash"], "role": "admin"}]}
 
-    default_password = "admin"
-    cfg = {"users": [{"username": "admin", "password_hash": generate_password_hash(default_password), "role": "admin"}]}
-    with open(AUTH_CONFIG_PATH, "w") as f:
-        json.dump(cfg, f, indent=2)
-    os.chmod(AUTH_CONFIG_PATH, 0o666)
+    cfg = {"users": [{"username": "admin", "password_hash": generate_password_hash("admin"), "role": "admin"}]}
+    _write_json(AUTH_CONFIG_PATH, cfg)
     return cfg
 
 AUTH_CONFIG = _load_or_create_auth_config()
@@ -106,22 +103,11 @@ def record_login_attempt(username, status, ip_address, role=None, reason=None):
         "reason": reason or ""
     }
     with login_log_lock:
-        logs = []
-        if os.path.exists(LOGIN_LOG_PATH):
-            try:
-                with open(LOGIN_LOG_PATH, "r") as f:
-                    logs = json.load(f)
-            except Exception:
-                logs = []
+        logs = _read_json(LOGIN_LOG_PATH, [])
         logs.append(entry)
         if len(logs) > 200:
             logs = logs[-200:]
-        try:
-            with open(LOGIN_LOG_PATH, "w") as f:
-                json.dump(logs, f, indent=2)
-            os.chmod(LOGIN_LOG_PATH, 0o666)
-        except Exception:
-            pass
+        _write_json(LOGIN_LOG_PATH, logs)
 
 _AUTH_EXEMPT_PATHS = {"/api/login", "/api/signup", "/api/auth-check"}
 _ADMIN_WRITE_PATHS = {
@@ -232,14 +218,8 @@ def api_get_login_logs():
     if not session.get("authenticated") or session.get("role") != "admin":
         return jsonify({"status": "error", "message": "Access Denied"}), 403
 
-    logs = []
     with login_log_lock:
-        if os.path.exists(LOGIN_LOG_PATH):
-            try:
-                with open(LOGIN_LOG_PATH, "r") as f:
-                    logs = json.load(f)
-            except Exception:
-                logs = []
+        logs = _read_json(LOGIN_LOG_PATH, [])
     return jsonify(list(reversed(logs))), 200
 
 # ─────────────────────────────────────────────
@@ -256,20 +236,12 @@ DEFAULT_SNMP_CONFIG = {
 
 def _load_and_prune_snmp_logs(days_retention=90):
     """Loads records and drops events older than 90 days (3 months)."""
-    logs = []
-    if os.path.exists(SNMP_LOG_PATH):
-        try:
-            with open(SNMP_LOG_PATH, "r") as f:
-                logs = json.load(f)
-        except Exception:
-            logs = []
-
+    logs = _read_json(SNMP_LOG_PATH, [])
     cutoff = datetime.datetime.now(IST) - datetime.timedelta(days=days_retention)
     valid = []
     for entry in logs:
         try:
-            ts = datetime.datetime.fromisoformat(entry["time"])
-            if ts >= cutoff:
+            if datetime.datetime.fromisoformat(entry["time"]) >= cutoff:
                 valid.append(entry)
         except Exception:
             continue
@@ -280,12 +252,7 @@ def record_snmp_trap(entry):
     with snmp_log_lock:
         logs = _load_and_prune_snmp_logs(days_retention=90)
         logs.append(entry)
-        try:
-            with open(SNMP_LOG_PATH, "w") as f:
-                json.dump(logs, f, indent=2)
-            os.chmod(SNMP_LOG_PATH, 0o666)
-        except Exception:
-            pass
+        _write_json(SNMP_LOG_PATH, logs)
 
 def send_snmp_trap(message):
     entry = {
@@ -299,28 +266,14 @@ def send_snmp_trap(message):
 
 def get_snmp_config():
     with snmp_config_lock:
-        if os.path.exists(SNMP_CONFIG_PATH):
-            try:
-                with open(SNMP_CONFIG_PATH) as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return json.loads(json.dumps(DEFAULT_SNMP_CONFIG))
+        return _read_json(SNMP_CONFIG_PATH, lambda: json.loads(json.dumps(DEFAULT_SNMP_CONFIG)))
 
 def update_snmp_config(mutator):
     global SNMP_DEVICES, COMMUNITY
     with snmp_config_lock:
-        if os.path.exists(SNMP_CONFIG_PATH):
-            try:
-                with open(SNMP_CONFIG_PATH) as f:
-                    cfg = json.load(f)
-            except Exception:
-                cfg = json.loads(json.dumps(DEFAULT_SNMP_CONFIG))
-        else:
-            cfg = json.loads(json.dumps(DEFAULT_SNMP_CONFIG))
+        cfg = _read_json(SNMP_CONFIG_PATH, lambda: json.loads(json.dumps(DEFAULT_SNMP_CONFIG)))
         cfg = mutator(cfg)
-        with open(SNMP_CONFIG_PATH, "w") as f:
-            json.dump(cfg, f, indent=2)
+        _write_json(SNMP_CONFIG_PATH, cfg)
         SNMP_DEVICES = [(d["ip"], d["port"]) for d in cfg.get("devices", [])]
         COMMUNITY = cfg.get("community", "public")
         return cfg
@@ -408,19 +361,12 @@ def _have(tool):
 
 def get_ntp_servers_config():
     with ntp_servers_lock:
-        if os.path.exists(NTP_SERVERS_CONFIG_PATH):
-            try:
-                with open(NTP_SERVERS_CONFIG_PATH) as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return json.loads(json.dumps(DEFAULT_NTP_SERVERS_CONFIG))
+        return _read_json(NTP_SERVERS_CONFIG_PATH, lambda: json.loads(json.dumps(DEFAULT_NTP_SERVERS_CONFIG)))
 
 def set_ntp_servers_config(servers):
     with ntp_servers_lock:
         cfg = {"servers": servers}
-        with open(NTP_SERVERS_CONFIG_PATH, "w") as f:
-            json.dump(cfg, f, indent=2)
+        _write_json(NTP_SERVERS_CONFIG_PATH, cfg)
         return cfg
 
 def get_ntp_time(server=None):
@@ -496,9 +442,8 @@ def sync_time():
     try:
         if not ntp_data:
             return False
-        import datetime as dt
-        server_dt = dt.datetime.fromisoformat(ntp_data["server_time"])
-        target_dt = server_dt + dt.timedelta(seconds=ntp_data["delay"] / 2)
+        server_dt = datetime.datetime.fromisoformat(ntp_data["server_time"])
+        target_dt = server_dt + datetime.timedelta(seconds=ntp_data["delay"] / 2)
         iso_str = target_dt.strftime("%Y-%m-%d %H:%M:%S")
         r = run_cmd(f'date -s "{iso_str}"')
         if r.returncode == 0:
@@ -636,22 +581,6 @@ def get_cpu_temperatures():
         pass
     return results
 
-# def get_current_network_info():
-#     r = run_cmd("ip -o -4 route show to default")
-#     iface_m = re.search(r"dev\s+(\S+)", r.stdout)
-#     iface = iface_m.group(1) if iface_m else "eth0"
-    
-#     r_ip = run_cmd(f"ip -4 addr show {iface}")
-#     ip_m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)/(\d+)", r_ip.stdout)
-#     ip = ip_m.group(1) if ip_m else "127.0.0.1"
-    
-#     return {
-#         "adapter": iface,
-#         "ip": ip,
-#         "subnet": "255.255.255.0",
-#         "gateway": "192.168.1.1"
-#     }
-
 def get_current_network_info():
     try:
         r_link = run_cmd("ip -o link show")
@@ -710,18 +639,12 @@ def api_system_info():
 def api_current_network():
     return jsonify(get_current_network_info()), 200
 
-# @app.route("/api/change-ip", methods=["POST"])
-# def change_ip_route():
-#     data = request.get_json(silent=True) or {}
-#     return jsonify({"status": "success", "message": f"IP change requested for {data.get('ip')}."}), 200
-
 def subnet_mask_to_cidr(mask_str):
     try:
         return sum(bin(int(x)).count("1") for x in mask_str.split("."))
     except Exception:
         return 24
 
-# ── PASTE apply_permanent_ip RIGHT HERE ──
 def apply_permanent_ip(adapter, new_ip, cidr, gateway, subnet="255.255.255.0"):
     """Persists static IP configuration across reboots using all available Linux mechanisms."""
     try:
@@ -850,53 +773,6 @@ def change_ip_route():
         "message": f"IP permanently configured to {new_ip}. Reconnecting to console...",
         "target_ip": new_ip
     }), 200
-
-# @app.route("/api/change-ip", methods=["POST"])
-# def change_ip_route():
-#     data = request.get_json(silent=True) or {}
-#     adapter = (data.get("adapter") or "").strip()
-#     new_ip = (data.get("ip") or "").strip()
-#     subnet = (data.get("subnet") or "255.255.255.0").strip()
-#     gateway = (data.get("gateway") or "").strip()
-
-#     # Validate inputs
-#     ip_pattern = r"^(\d{1,3}\.){3}\d{1,3}$"
-#     if not re.match(ip_pattern, new_ip):
-#         return jsonify({"status": "error", "message": "Invalid IP address format."}), 400
-
-#     if not adapter:
-#         adapter = get_current_network_info().get("adapter", "eth0")
-
-#     cidr = subnet_mask_to_cidr(subnet)
-
-#     # Shell script to flush old IP, apply new static IP, and restore default route
-#     commands = [
-#         f"ip addr flush dev {adapter}",
-#         f"ip addr add {new_ip}/{cidr} dev {adapter}",
-#         f"ip link set {adapter} up"
-#     ]
-#     if gateway and re.match(ip_pattern, gateway):
-#         commands.append(f"ip route add default via {gateway} dev {adapter}")
-
-#     # If NetworkManager is active, also persist changes via nmcli
-#     if _have("nmcli"):
-#         commands.append(f"nmcli device modify {adapter} ipv4.addresses {new_ip}/{cidr} ipv4.gateway {gateway} ipv4.method manual 2>/dev/null || true")
-
-#     full_cmd = " && ".join(commands)
-
-#     # Execute in a separate background thread after 0.5s so the HTTP response is returned to the UI before network switches
-#     def apply_network_switch():
-#         time.sleep(0.5)
-#         run_cmd(full_cmd)
-
-#     threading.Thread(target=apply_network_switch, daemon=True).start()
-
-#     send_snmp_trap(f"NETWORK: Interface {adapter} changed to {new_ip}/{cidr} (Gateway: {gateway})")
-    
-#     return jsonify({
-#         "status": "success",
-#         "message": f"Network configuration applied. Reconnecting to {new_ip}..."
-#     }), 200
 
 @app.route("/api/reboot", methods=["POST"])
 def reboot_route():

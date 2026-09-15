@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import io from "socket.io-client";
 import axios from "axios";
 import { useAuth } from "./RequireAuth";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 const CLOCK_FORMAT_KEY = "netops.clockFormat";
 
 function loadSavedFormat() {

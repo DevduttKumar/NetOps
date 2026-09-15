@@ -3,5 +3,3 @@ flask-cors
 flask-socketio
 gevent
 gevent-websocket
-pysnmp
-pyasn1

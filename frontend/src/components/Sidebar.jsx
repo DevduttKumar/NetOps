@@ -3,8 +3,7 @@ import { NavLink } from "react-router-dom";
 import axios from "axios";
 import NetOpsLogo from "./NetOpsLogo";
 import { useAuth } from "./RequireAuth";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 
 const NAV = [
   { id: "network", label: "Network Setting", icon: "🌐" },

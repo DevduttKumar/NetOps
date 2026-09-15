@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { useAuth } from "./RequireAuth";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 
 const TRAP_CATEGORIES = [
   { id: "ip_change", label: "IP Change", icon: "🌐", color: "var(--blue-primary)", bg: "var(--blue-dim)" },

@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import NetOpsLogo from "./NetOpsLogo";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 
 export default function Login({ onLoggedIn }) {
   const [isSignUp, setIsSignUp] = useState(false);

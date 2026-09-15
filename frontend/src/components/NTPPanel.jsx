@@ -2,8 +2,7 @@ import React, { useEffect, useState } from "react";
 import io from "socket.io-client";
 import axios from "axios";
 import { useAuth } from "./RequireAuth";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 const MAX_SERVERS = 5;
 
 export default function NTPPanel() {
@@ -75,16 +74,6 @@ export default function NTPPanel() {
 
   return (
     <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 28, width: "100%", maxWidth: "1400px" }}>
-      {/* {!isAdmin && (
-        <div style={{
-          background: "var(--blue-dim)", border: "1px solid var(--border-focus)",
-          borderRadius: "var(--radius-sm)", padding: "14px 18px", color: "var(--blue-primary)",
-          fontSize: "0.9rem", display: "flex", alignItems: "center", gap: 10
-        }}>
-          <span>👁️ <strong>Viewer Mode:</strong> NTP server list and manual synchronization actions are restricted to administrators.</span>
-        </div>
-      )} */}
-
       <div className="stat-grid">
         <div className="stat-box">
           <div className="stat-label">Active Source</div>
@@ -94,10 +83,6 @@ export default function NTPPanel() {
           <div className="stat-label">Status</div>
           <div className="stat-value" style={{ textTransform: "capitalize" }}>{ntp?.status || "Unknown"}</div>
         </div>
-        {/* <div className="stat-box">
-          <div className="stat-label">Round-Trip Delay</div>
-          <div className="stat-value">{ntp?.delay != null ? `${(ntp.delay * 1000).toFixed(1)} ms` : "—"}</div>
-        </div> */}
         <div className="stat-box">
           <div className="stat-label">NTP Daemon</div>
           <div className="stat-value" style={{ color: ntp?.service_running ? "var(--green)" : "var(--red)" }}>

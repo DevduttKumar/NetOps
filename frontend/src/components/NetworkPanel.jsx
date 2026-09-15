@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import { useAuth } from "./RequireAuth";
-
-const BACKEND = `${window.location.protocol}//${window.location.hostname}:5050`;
+import { BACKEND } from "../config";
 
 const SUBNET_PRESETS = [
   { label: "/24 — 255.255.255.0", value: "255.255.255.0" },
